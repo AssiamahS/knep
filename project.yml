@@ -41,7 +41,7 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_FILE: knep-ios/Info.plist
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: 9Q38C6TT37
+        DEVELOPMENT_TEAM: QGMAWHX827
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.9"
     dependencies:
