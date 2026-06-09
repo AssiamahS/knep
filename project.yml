@@ -36,11 +36,12 @@ targets:
     settings:
       base:
         PRODUCT_NAME: knep
-        PRODUCT_BUNDLE_IDENTIFIER: com.djsly.knep-ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.assiamah.knep
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_FILE: knep-ios/Info.plist
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 9Q38C6TT37
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.9"
     dependencies:
