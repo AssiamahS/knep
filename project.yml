@@ -1,0 +1,49 @@
+name: knep
+options:
+  bundleIdPrefix: com.djsly
+  deploymentTarget:
+    macOS: "13.0"
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+
+targets:
+  knep-mac:
+    type: application
+    platform: macOS
+    sources:
+      - path: knep-mac
+    settings:
+      base:
+        PRODUCT_NAME: knep
+        PRODUCT_BUNDLE_IDENTIFIER: com.djsly.knep
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: knep-mac/Info.plist
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.9"
+    dependencies:
+      - sdk: ScreenCaptureKit.framework
+      - sdk: VideoToolbox.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreMedia.framework
+
+  knep-ios:
+    type: application
+    platform: iOS
+    sources:
+      - path: knep-ios
+    settings:
+      base:
+        PRODUCT_NAME: knep
+        PRODUCT_BUNDLE_IDENTIFIER: com.djsly.knep-ios
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: knep-ios/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.9"
+    dependencies:
+      - sdk: VideoToolbox.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreMedia.framework
