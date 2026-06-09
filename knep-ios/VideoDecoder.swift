@@ -4,10 +4,9 @@ import CoreMedia
 import CoreVideo
 
 class VideoDecoder {
-    var displayLayer: AVSampleBufferDisplayLayer?
+    var streamView: StreamDisplayView?
     private var formatDescription: CMVideoFormatDescription?
 
-    // Type 0x01 payload: [4-byte BE SPS len][SPS][4-byte BE PPS len][PPS]
     func receiveFormatData(_ data: Data) {
         guard data.count > 8 else { return }
         var offset = 0
@@ -42,11 +41,9 @@ class VideoDecoder {
         }
     }
 
-    // Type 0x02 payload: raw AVCC H.264 data (NAL units with 4-byte length prefixes)
     func receiveVideoFrame(_ data: Data) {
         guard let formatDesc = formatDescription else { return }
 
-        // Allocate owned memory for the block buffer
         let count = data.count
         let mem = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
         data.copyBytes(to: mem, count: count)
@@ -54,7 +51,7 @@ class VideoDecoder {
         var blockBuffer: CMBlockBuffer?
         guard CMBlockBufferCreateWithMemoryBlock(
             allocator: nil, memoryBlock: mem, blockLength: count,
-            blockAllocator: kCFAllocatorDefault,  // CMBlockBuffer owns + will free
+            blockAllocator: kCFAllocatorDefault,
             customBlockSource: nil, offsetToData: 0, dataLength: count,
             flags: 0, blockBufferOut: &blockBuffer
         ) == kCMBlockBufferNoErr, let block = blockBuffer else {
@@ -71,7 +68,7 @@ class VideoDecoder {
             sampleBufferOut: &sampleBuffer
         ) == noErr, let sample = sampleBuffer else { return }
 
-        // Mark for immediate display (no presentation-time scheduling)
+        // kCMSampleAttachmentKey_DisplayImmediately so the renderer shows it right away
         if let arr = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: true),
            CFArrayGetCount(arr) > 0 {
             let dict = unsafeBitCast(CFArrayGetValueAtIndex(arr, 0), to: CFMutableDictionary.self)
@@ -83,9 +80,7 @@ class VideoDecoder {
         }
 
         DispatchQueue.main.async { [weak self] in
-            guard let layer = self?.displayLayer else { return }
-            if layer.status == .failed { layer.flush() }
-            layer.enqueue(sample)
+            self?.streamView?.enqueue(sample)
         }
     }
 }
