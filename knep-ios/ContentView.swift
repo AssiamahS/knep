@@ -7,7 +7,6 @@ struct ContentView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            // Always in hierarchy so AVSampleBufferDisplayLayer stays alive
             StreamView(decoder: conn.videoDecoder)
                 .ignoresSafeArea()
                 .opacity(conn.isConnected ? 1 : 0)

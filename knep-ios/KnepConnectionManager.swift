@@ -13,30 +13,47 @@ class KnepConnectionManager: ObservableObject {
     private let ioQueue = DispatchQueue(label: "knep.io", qos: .userInteractive)
 
     func start() {
+        browser?.cancel()
+        browser = nil
+
         let params = NWParameters.tcp
         params.includePeerToPeer = true
 
-        browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_knep._tcp", domain: nil), using: params)
+        let b = NWBrowser(for: .bonjourWithTXTRecord(type: "_knep2._tcp", domain: nil), using: params)
+        browser = b
 
-        browser?.stateUpdateHandler = { [weak self] state in
-            if case .failed(let err) = state {
+        b.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .failed:
                 DispatchQueue.main.async { self?.statusMessage = "Search error — retrying…" }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.start() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.start() }
+            case .waiting:
+                DispatchQueue.main.async { self?.statusMessage = "Network unavailable — retrying…" }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.start() }
+            default: break
             }
         }
 
-        browser?.browseResultsChangedHandler = { [weak self] results, _ in
-            // Take the first knep service found
+        b.browseResultsChangedHandler = { [weak self] results, _ in
+            guard let self else { return }
             if let endpoint = results.first(where: {
-                if case .service(let name, let type, _, _) = $0.endpoint { return type.contains("_knep") }
+                if case .service(_, let type, _, _) = $0.endpoint { return type.contains("_knep2") }
                 return false
             })?.endpoint ?? results.first?.endpoint {
-                self?.browser?.cancel()
-                self?.connect(to: endpoint)
+                self.browser?.cancel()
+                self.browser = nil
+                self.connect(to: endpoint)
             }
         }
 
-        browser?.start(queue: ioQueue)
+        b.start(queue: ioQueue)
+
+        // Restart if no service found within 5 seconds
+        ioQueue.asyncAfter(deadline: .now() + 5) { [weak self, weak b] in
+            guard let self, self.browser === b, !self.isConnected else { return }
+            self.start()
+        }
+
         DispatchQueue.main.async { self.statusMessage = "Searching for Mac…" }
     }
 

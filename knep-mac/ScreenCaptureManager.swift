@@ -8,23 +8,35 @@ class ScreenCaptureManager: NSObject {
     private var stream: SCStream?
     private var encoder: VideoEncoder?
 
+    private func slog(_ msg: String) {
+        NSLog("[knep] \(msg)")
+        let line = "\(Date()): \(msg)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        let path = "/tmp/knep_sck.log"
+        if let fh = FileHandle(forWritingAtPath: path) {
+            fh.seekToEndOfFile(); fh.write(data); try? fh.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        }
+    }
+
     func start() {
+        slog("start() called")
         Task { await setup() }
     }
 
     private func setup() async {
-        guard CGRequestScreenCaptureAccess() else {
-            await MainActor.run { showPermissionAlert() }
-            return
-        }
-
+        slog("setup() running")
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard let display = content.displays.first else { return }
+            guard let display = content.displays.first else {
+                slog("no displays found")
+                return
+            }
 
-            // Cap at 1920×1080 to keep bitrate sane over the connection
             let w = min(display.width, 1920)
             let h = min(display.height, 1080)
+            slog("capture starting \(w)x\(h)")
 
             let enc = VideoEncoder(width: w, height: h)
             enc.onEncodedFrame = { [weak self] type, data in self?.onFrame?(type, data) }
@@ -43,9 +55,13 @@ class ScreenCaptureManager: NSObject {
             try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: .global(qos: .userInteractive))
             try await s.startCapture()
             stream = s
-            print("[capture] started \(w)×\(h) @ 30fps")
+            slog("capture running \(w)x\(h) @ 30fps")
         } catch {
-            print("[capture] error: \(error)")
+            slog("capture error: \(error)")
+            let msg = "\(error)"
+            if msg.contains("TCCDenied") || msg.contains("permissionDenied") || msg.contains("1108") || msg.contains("3801") {
+                await MainActor.run { showPermissionAlert() }
+            }
         }
     }
 

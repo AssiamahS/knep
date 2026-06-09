@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.djsly
   deploymentTarget:
     macOS: "13.0"
-    iOS: "16.0"
+    iOS: "17.0"
   xcodeVersion: "15.0"
 
 targets:
@@ -21,6 +21,8 @@ targets:
         INFOPLIST_FILE: knep-mac/Info.plist
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: QGMAWHX827
+        CODE_SIGN_ENTITLEMENTS: knep-mac/knep-mac.entitlements
         SWIFT_VERSION: "5.9"
     dependencies:
       - sdk: ScreenCaptureKit.framework

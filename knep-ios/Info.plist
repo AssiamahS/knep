@@ -20,7 +20,7 @@
     <string>knep needs local network access to find and connect to your Mac.</string>
     <key>NSBonjourServices</key>
     <array>
-        <string>_knep._tcp</string>
+        <string>_knep2._tcp</string>
     </array>
     <key>UIRequiredDeviceCapabilities</key>
     <array>

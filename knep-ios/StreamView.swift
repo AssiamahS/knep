@@ -1,9 +1,9 @@
 import SwiftUI
 import AVFoundation
 import UIKit
+import CoreMedia
 
 final class StreamDisplayView: UIView {
-    // iOS 16 fallback
     private let displayLayer = AVSampleBufferDisplayLayer()
 
     override init(frame: CGRect) {
@@ -11,15 +11,18 @@ final class StreamDisplayView: UIView {
         backgroundColor = .black
         displayLayer.videoGravity = .resizeAspect
         displayLayer.backgroundColor = UIColor.black.cgColor
-        displayLayer.frame = bounds
         layer.addSublayer(displayLayer)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        displayLayer.frame = bounds
+    }
+
     func enqueue(_ sampleBuffer: CMSampleBuffer) {
-        if displayLayer.status == .failed { displayLayer.flush() }
-        displayLayer.enqueue(sampleBuffer)
+        displayLayer.sampleBufferRenderer.enqueue(sampleBuffer)
     }
 }
 

@@ -15,7 +15,7 @@ class KnepServer {
             params.includePeerToPeer = true
 
             listener = try NWListener(using: params, on: 12345)
-            listener?.service = NWListener.Service(name: "knep", type: "_knep._tcp")
+            listener?.service = NWListener.Service(name: "knep", type: "_knep2._tcp")
 
             listener?.stateUpdateHandler = { state in
                 switch state {

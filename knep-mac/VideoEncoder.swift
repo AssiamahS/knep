@@ -90,11 +90,14 @@ class VideoEncoder {
 
         // Send AVCC frame data
         guard let block = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
-        var ptr: UnsafeMutablePointer<Int8>?
-        var totalLen = 0
-        CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &totalLen, dataPointerOut: &ptr)
-        guard let ptr, totalLen > 0 else { return }
-        onEncodedFrame?(0x02, Data(bytes: ptr, count: totalLen))
+        let totalLen = CMBlockBufferGetDataLength(block)
+        guard totalLen > 0 else { return }
+        var frameData = Data(count: totalLen)
+        let status = frameData.withUnsafeMutableBytes {
+            CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: totalLen, destination: $0.baseAddress!)
+        }
+        guard status == kCMBlockBufferNoErr else { return }
+        onEncodedFrame?(0x02, frameData)
     }
 
     private func extractParams(_ desc: CMVideoFormatDescription) -> Data? {
