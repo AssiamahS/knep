@@ -13,6 +13,11 @@ class KnepServer {
         do {
             let params = NWParameters.tcp
             params.includePeerToPeer = true
+            // Nagle holds small frame packets up to ~200ms each — kills typing
+            // latency over WiFi. Flush every send immediately.
+            if let tcp = params.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
+                tcp.noDelay = true
+            }
 
             listener = try NWListener(using: params, on: 12345)
             listener?.service = NWListener.Service(name: "knep", type: "_knep2._tcp")
@@ -85,9 +90,10 @@ final class KnepConnection {
     private let sendQueue = DispatchQueue(label: "knep.conn.send", qos: .userInteractive)
     private var pending: [Data] = []
     private var sending = false
-    // ~2s of video at 30fps. On overflow we drop the frame; the 60-frame
-    // keyframe interval recovers the picture within 2s.
-    private let maxPending = 120
+    // Keep the backlog short so latency can't accumulate — stale frames are
+    // worse than dropped ones for interactive use. On overflow we drop the
+    // frame; the 60-frame keyframe interval recovers the picture within 2s.
+    private let maxPending = 20
 
     init(nwConnection: NWConnection) {
         self.nwConn = nwConnection
