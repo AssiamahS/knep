@@ -16,8 +16,8 @@ targets:
       base:
         PRODUCT_NAME: knep
         PRODUCT_BUNDLE_IDENTIFIER: com.djsly.knep
-        MARKETING_VERSION: "0.1.1"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "0.1.2"
+        CURRENT_PROJECT_VERSION: "3"
         INFOPLIST_FILE: knep-mac/Info.plist
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
@@ -39,8 +39,8 @@ targets:
       base:
         PRODUCT_NAME: knep
         PRODUCT_BUNDLE_IDENTIFIER: com.assiamah.knep
-        MARKETING_VERSION: "0.1.1"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "0.1.2"
+        CURRENT_PROJECT_VERSION: "3"
         INFOPLIST_FILE: knep-ios/Info.plist
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: QGMAWHX827

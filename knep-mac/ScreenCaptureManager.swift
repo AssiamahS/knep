@@ -7,6 +7,21 @@ class ScreenCaptureManager: NSObject {
     var onFrame: ((UInt8, Data) -> Void)?
     private var stream: SCStream?
     private var encoder: VideoEncoder?
+    private let lastFrameLock = NSLock()
+    private var lastPixelBuffer: CVPixelBuffer?
+
+    // SCK only delivers frames when the screen changes, so a client connecting
+    // while the screen is static would stare at black until something moves.
+    // Re-encode the last captured frame as a forced keyframe instead.
+    func resendKeyFrame() {
+        encoder?.requestKeyFrame()
+        lastFrameLock.lock()
+        let pb = lastPixelBuffer
+        lastFrameLock.unlock()
+        if let pb {
+            encoder?.encode(pixelBuffer: pb, pts: CMClockGetTime(CMClockGetHostTimeClock()))
+        }
+    }
 
     private func slog(_ msg: String) {
         NSLog("[knep] \(msg)")
@@ -94,6 +109,9 @@ extension ScreenCaptureManager: SCStreamDelegate {
 extension ScreenCaptureManager: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        lastFrameLock.lock()
+        lastPixelBuffer = pixelBuffer
+        lastFrameLock.unlock()
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         encoder?.encode(pixelBuffer: pixelBuffer, pts: pts)
     }

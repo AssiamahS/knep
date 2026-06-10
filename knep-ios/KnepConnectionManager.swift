@@ -15,6 +15,9 @@ class KnepConnectionManager: ObservableObject {
     func start() {
         browser?.cancel()
         browser = nil
+        connection?.cancel()
+        connection = nil
+        ioQueue.async { self.buffer = Data() }
 
         let params = NWParameters.tcp
         params.includePeerToPeer = true
@@ -57,6 +60,23 @@ class KnepConnectionManager: ObservableObject {
         DispatchQueue.main.async { self.statusMessage = "Searching for Mac…" }
     }
 
+    // iOS tears down sockets and the video decoder when the app is backgrounded.
+    // pause() drops everything cleanly (the Mac stops capturing); resume() flushes
+    // the dead decoder state and reconnects from scratch.
+    func pause() {
+        browser?.cancel()
+        browser = nil
+        connection?.cancel()
+        connection = nil
+        ioQueue.async { self.buffer = Data() }
+        DispatchQueue.main.async { self.isConnected = false; self.statusMessage = "Paused" }
+    }
+
+    func resume() {
+        videoDecoder.reset()
+        start()
+    }
+
     private func connect(to endpoint: NWEndpoint) {
         DispatchQueue.main.async { self.statusMessage = "Connecting…" }
 
@@ -75,6 +95,14 @@ class KnepConnectionManager: ObservableObject {
                 DispatchQueue.main.async { self.isConnected = false; self.statusMessage = "Lost connection — retrying…" }
                 self.ioQueue.async { self.buffer = Data() }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.start() }
+            case .waiting:
+                // Server vanished mid-handshake — cancel and rediscover instead
+                // of letting NWConnection sit in waiting forever.
+                conn.cancel()
+                DispatchQueue.main.async { self.isConnected = false; self.statusMessage = "Lost connection — retrying…" }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    if self.connection === conn { self.start() }
+                }
             case .cancelled:
                 DispatchQueue.main.async { self.isConnected = false }
             default: break

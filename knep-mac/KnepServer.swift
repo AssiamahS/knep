@@ -66,6 +66,10 @@ class KnepServer {
             }
             captureManager = mgr
             mgr.start()
+        } else {
+            // Capture already running (reconnect, or a stale conn kept it alive):
+            // give the new client an immediate keyframe to decode from.
+            captureManager?.resendKeyFrame()
         }
     }
 
@@ -136,9 +140,17 @@ final class KnepConnection {
         guard !sending, !pending.isEmpty else { return }
         sending = true
         let msg = pending.removeFirst()
-        nwConn.send(content: msg, completion: .contentProcessed { [weak self] _ in
+        nwConn.send(content: msg, completion: .contentProcessed { [weak self] error in
             guard let self else { return }
             self.sendQueue.async {
+                if error != nil {
+                    // Dead peer (app swipe-killed, network switch) — reap the
+                    // connection instead of pumping into a void forever.
+                    self.pending.removeAll()
+                    self.nwConn.cancel()
+                    self.onDisconnect?()
+                    return
+                }
                 self.sending = false
                 self.pump()
             }

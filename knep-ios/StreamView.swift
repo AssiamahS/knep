@@ -22,7 +22,18 @@ final class StreamDisplayView: UIView {
     }
 
     func enqueue(_ sampleBuffer: CMSampleBuffer) {
-        displayLayer.sampleBufferRenderer.enqueue(sampleBuffer)
+        let renderer = displayLayer.sampleBufferRenderer
+        // The renderer silently dies after backgrounding or a decode error and
+        // ignores everything until flushed — this is the "black screen until
+        // force-quit" failure mode.
+        if renderer.status == .failed || renderer.requiresFlushToResumeDecoding {
+            renderer.flush()
+        }
+        renderer.enqueue(sampleBuffer)
+    }
+
+    func flush() {
+        displayLayer.sampleBufferRenderer.flush()
     }
 }
 

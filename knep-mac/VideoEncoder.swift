@@ -6,7 +6,11 @@ class VideoEncoder {
     private var session: VTCompressionSession?
     private let width: Int
     private let height: Int
-    private var isFirstFrame = true
+    private var needsKeyFrame = true
+
+    // Next encoded frame becomes an IDR — used when a client (re)connects so it
+    // gets a decodable picture immediately instead of waiting on the GOP.
+    func requestKeyFrame() { needsKeyFrame = true }
 
     var onEncodedFrame: ((UInt8, Data) -> Void)?
 
@@ -63,10 +67,10 @@ class VideoEncoder {
     func encode(pixelBuffer: CVImageBuffer, pts: CMTime) {
         guard let session else { return }
 
-        let props: CFDictionary? = isFirstFrame
+        let props: CFDictionary? = needsKeyFrame
             ? [kVTEncodeFrameOptionKey_ForceKeyFrame: true] as CFDictionary
             : nil
-        isFirstFrame = false
+        needsKeyFrame = false
 
         VTCompressionSessionEncodeFrame(
             session,

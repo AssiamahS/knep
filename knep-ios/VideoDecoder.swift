@@ -7,6 +7,11 @@ class VideoDecoder {
     var streamView: StreamDisplayView?
     private var formatDescription: CMVideoFormatDescription?
 
+    func reset() {
+        formatDescription = nil
+        DispatchQueue.main.async { [weak self] in self?.streamView?.flush() }
+    }
+
     func receiveFormatData(_ data: Data) {
         guard data.count > 8 else { return }
         var offset = 0

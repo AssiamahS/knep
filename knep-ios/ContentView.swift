@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var conn = KnepConnectionManager()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -34,6 +35,17 @@ struct ContentView: View {
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-        .onAppear { conn.start() }
+        .onAppear {
+            conn.start()
+            // A second monitor should never auto-lock mid-use.
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background: conn.pause()
+            case .active: conn.resume()
+            default: break
+            }
+        }
     }
 }
