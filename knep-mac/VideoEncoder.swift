@@ -23,18 +23,28 @@ class VideoEncoder {
         // outputCallback: nil — we use the per-frame outputHandler in encode() instead.
         // This avoids the arm64e PAC crash that occurs when CMSampleBuffer is bridged
         // through a @convention(c) callback's ObjC thunk on M-series Macs.
-        let status = VTCompressionSessionCreate(
-            allocator: nil,
-            width: Int32(width),
-            height: Int32(height),
-            codecType: kCMVideoCodecType_H264,
-            encoderSpecification: spec as CFDictionary,
-            imageBufferAttributes: nil,
-            compressedDataAllocator: nil,
-            outputCallback: nil,
-            refcon: nil,
-            compressionSessionOut: &session
-        )
+        func createSession(_ encoderSpec: CFDictionary?) -> OSStatus {
+            VTCompressionSessionCreate(
+                allocator: nil,
+                width: Int32(width),
+                height: Int32(height),
+                codecType: kCMVideoCodecType_H264,
+                encoderSpecification: encoderSpec,
+                imageBufferAttributes: nil,
+                compressedDataAllocator: nil,
+                outputCallback: nil,
+                refcon: nil,
+                compressionSessionOut: &session
+            )
+        }
+
+        var status = createSession(spec as CFDictionary)
+        if status != noErr {
+            // Low-latency rate control needs the Apple Silicon hardware encoder;
+            // on Intel Macs the session won't create with it. Fall back to default.
+            print("[encoder] low-latency unavailable (\(status)), using default encoder")
+            status = createSession(nil)
+        }
 
         guard status == noErr, let session else {
             print("[encoder] create failed: \(status)")

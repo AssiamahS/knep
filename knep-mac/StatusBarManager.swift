@@ -26,7 +26,8 @@ class StatusBarManager {
     private func buildMenu() {
         let menu = NSMenu()
 
-        let titleItem = NSMenuItem(title: "knep  v0.1.0", action: nil, keyEquivalent: "")
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let titleItem = NSMenuItem(title: "knep  v\(version)", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
         menu.addItem(.separator())
