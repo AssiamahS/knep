@@ -20,6 +20,9 @@ class VideoEncoder {
             kVTVideoEncoderSpecification_EnableLowLatencyRateControl: true
         ]
 
+        // outputCallback: nil — we use the per-frame outputHandler in encode() instead.
+        // This avoids the arm64e PAC crash that occurs when CMSampleBuffer is bridged
+        // through a @convention(c) callback's ObjC thunk on M-series Macs.
         let status = VTCompressionSessionCreate(
             allocator: nil,
             width: Int32(width),
@@ -28,8 +31,8 @@ class VideoEncoder {
             encoderSpecification: spec as CFDictionary,
             imageBufferAttributes: nil,
             compressedDataAllocator: nil,
-            outputCallback: VideoEncoder.outputCB,
-            refcon: Unmanaged.passUnretained(self).toOpaque(),
+            outputCallback: nil,
+            refcon: nil,
             compressionSessionOut: &session
         )
 
@@ -61,19 +64,24 @@ class VideoEncoder {
             presentationTimeStamp: pts,
             duration: .invalid,
             frameProperties: props,
-            sourceFrameRefcon: nil,
             infoFlagsOut: nil
-        )
+        ) { [weak self] status, _, sampleBuffer in
+            guard status == noErr, let sampleBuffer, let self else { return }
+            self.handleOutput(sampleBuffer)
+        }
     }
 
-    private static let outputCB: VTCompressionOutputCallback = { refcon, _, status, _, sampleBuffer in
-        guard status == noErr, let sampleBuffer, let refcon else { return }
-        Unmanaged<VideoEncoder>.fromOpaque(refcon).takeUnretainedValue()
-            .handleOutput(sampleBuffer)
+    func stop() {
+        guard let s = session else { return }
+        session = nil
+        VTCompressionSessionCompleteFrames(s, untilPresentationTimeStamp: .positiveInfinity)
+        VTCompressionSessionInvalidate(s)
+        onEncodedFrame = nil
     }
+
+    deinit { stop() }
 
     private func handleOutput(_ sampleBuffer: CMSampleBuffer) {
-        // Determine keyframe
         var isKeyFrame = true
         if let arr = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false),
            CFArrayGetCount(arr) > 0 {
@@ -81,22 +89,20 @@ class VideoEncoder {
             isKeyFrame = !(dict[kCMSampleAttachmentKey_NotSync as String] as? Bool ?? false)
         }
 
-        // Send SPS/PPS before every keyframe so the decoder can re-sync
         if isKeyFrame,
            let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
            let paramData = extractParams(formatDesc) {
             onEncodedFrame?(0x01, paramData)
         }
 
-        // Send AVCC frame data
         guard let block = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
         let totalLen = CMBlockBufferGetDataLength(block)
         guard totalLen > 0 else { return }
         var frameData = Data(count: totalLen)
-        let status = frameData.withUnsafeMutableBytes {
+        let copyStatus = frameData.withUnsafeMutableBytes {
             CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: totalLen, destination: $0.baseAddress!)
         }
-        guard status == kCMBlockBufferNoErr else { return }
+        guard copyStatus == kCMBlockBufferNoErr else { return }
         onEncodedFrame?(0x02, frameData)
     }
 

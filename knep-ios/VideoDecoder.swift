@@ -31,52 +31,58 @@ class VideoDecoder {
                 ]
                 let sizes = [spsLen, ppsLen]
                 var desc: CMVideoFormatDescription?
-                CMVideoFormatDescriptionCreateFromH264ParameterSets(
+                let st = CMVideoFormatDescriptionCreateFromH264ParameterSets(
                     allocator: nil, parameterSetCount: 2,
                     parameterSetPointers: ptrs, parameterSetSizes: sizes,
                     nalUnitHeaderLength: 4, formatDescriptionOut: &desc
                 )
-                self.formatDescription = desc
+                if st == noErr { self.formatDescription = desc }
             }
         }
     }
 
     func receiveVideoFrame(_ data: Data) {
-        guard let formatDesc = formatDescription else { return }
+        guard let formatDesc = formatDescription, !data.isEmpty else { return }
 
-        let count = data.count
-        let mem = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
-        data.copyBytes(to: mem, count: count)
-
+        // CMBlockBuffer owns its own memory allocation — no manual pointer management.
         var blockBuffer: CMBlockBuffer?
         guard CMBlockBufferCreateWithMemoryBlock(
-            allocator: nil, memoryBlock: mem, blockLength: count,
+            allocator: nil,
+            memoryBlock: nil,
+            blockLength: data.count,
             blockAllocator: kCFAllocatorDefault,
-            customBlockSource: nil, offsetToData: 0, dataLength: count,
-            flags: 0, blockBufferOut: &blockBuffer
-        ) == kCMBlockBufferNoErr, let block = blockBuffer else {
-            mem.deallocate()
-            return
-        }
+            customBlockSource: nil,
+            offsetToData: 0,
+            dataLength: data.count,
+            flags: kCMBlockBufferAssureMemoryNowFlag,
+            blockBufferOut: &blockBuffer
+        ) == kCMBlockBufferNoErr, let block = blockBuffer else { return }
 
-        var sampleSize = count
+        let copyStatus = data.withUnsafeBytes { ptr in
+            CMBlockBufferReplaceDataBytes(with: ptr.baseAddress!, blockBuffer: block, offsetIntoDestination: 0, dataLength: data.count)
+        }
+        guard copyStatus == kCMBlockBufferNoErr else { return }
+
+        // Provide a valid PTS so AVSampleBufferVideoRenderer can schedule the frame.
+        var timing = CMSampleTimingInfo(
+            duration: .invalid,
+            presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
+            decodeTimeStamp: .invalid
+        )
+        var sampleSize = data.count
         var sampleBuffer: CMSampleBuffer?
         guard CMSampleBufferCreateReady(
             allocator: nil, dataBuffer: block, formatDescription: formatDesc,
-            sampleCount: 1, sampleTimingEntryCount: 0, sampleTimingArray: nil,
+            sampleCount: 1, sampleTimingEntryCount: 1, sampleTimingArray: &timing,
             sampleSizeEntryCount: 1, sampleSizeArray: &sampleSize,
             sampleBufferOut: &sampleBuffer
         ) == noErr, let sample = sampleBuffer else { return }
 
-        // kCMSampleAttachmentKey_DisplayImmediately so the renderer shows it right away
+        // Mark for immediate display (bypass renderer clock scheduling).
         if let arr = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: true),
            CFArrayGetCount(arr) > 0 {
-            let dict = unsafeBitCast(CFArrayGetValueAtIndex(arr, 0), to: CFMutableDictionary.self)
-            CFDictionarySetValue(
-                dict,
-                Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
-                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
-            )
+            let dict = unsafeBitCast(CFArrayGetValueAtIndex(arr, 0), to: NSMutableDictionary.self)
+            dict[kCMSampleAttachmentKey_DisplayImmediately as NSString] = kCFBooleanTrue
         }
 
         DispatchQueue.main.async { [weak self] in

@@ -82,7 +82,12 @@ class KnepServer {
 final class KnepConnection {
     private let nwConn: NWConnection
     var onDisconnect: (() -> Void)?
-    private var sendPending = false
+    private let sendQueue = DispatchQueue(label: "knep.conn.send", qos: .userInteractive)
+    private var pending: [Data] = []
+    private var sending = false
+    // ~2s of video at 30fps. On overflow we drop the frame; the 60-frame
+    // keyframe interval recovers the picture within 2s.
+    private let maxPending = 120
 
     init(nwConnection: NWConnection) {
         self.nwConn = nwConnection
@@ -105,16 +110,32 @@ final class KnepConnection {
     }
 
     func send(type: UInt8, payload: Data) {
-        guard !sendPending else { return } // drop if backpressured
-        sendPending = true
-
         var header = Data(count: 5)
         let len = UInt32(payload.count).bigEndian
         withUnsafeBytes(of: len) { header.replaceSubrange(0..<4, with: $0) }
         header[4] = type
+        let msg = header + payload
 
-        nwConn.send(content: header + payload, completion: .contentProcessed { [weak self] _ in
-            self?.sendPending = false
+        // Never drop individual messages mid-stream — the 0x01 param set and its
+        // 0x02 keyframe arrive back-to-back and both must reach the decoder.
+        sendQueue.async { [weak self] in
+            guard let self else { return }
+            guard self.pending.count < self.maxPending else { return }
+            self.pending.append(msg)
+            self.pump()
+        }
+    }
+
+    private func pump() {
+        guard !sending, !pending.isEmpty else { return }
+        sending = true
+        let msg = pending.removeFirst()
+        nwConn.send(content: msg, completion: .contentProcessed { [weak self] _ in
+            guard let self else { return }
+            self.sendQueue.async {
+                self.sending = false
+                self.pump()
+            }
         })
     }
 

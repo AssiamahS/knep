@@ -68,6 +68,7 @@ class ScreenCaptureManager: NSObject {
     func stop() {
         let s = stream
         stream = nil
+        encoder?.stop()
         encoder = nil
         Task { try? await s?.stopCapture() }
     }

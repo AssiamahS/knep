@@ -73,7 +73,8 @@ class KnepConnectionManager: ObservableObject {
                 self.receive()
             case .failed(let err):
                 DispatchQueue.main.async { self.isConnected = false; self.statusMessage = "Lost connection — retrying…" }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.buffer = Data(); self.start() }
+                self.ioQueue.async { self.buffer = Data() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.start() }
             case .cancelled:
                 DispatchQueue.main.async { self.isConnected = false }
             default: break
@@ -97,16 +98,22 @@ class KnepConnectionManager: ObservableObject {
     }
 
     private func drain() {
-        while buffer.count >= 5 {
-            let payloadLen = Int(buffer.subdata(in: 0..<4).withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
-            let msgType   = buffer[4]
-            let needed    = 5 + payloadLen
-            guard buffer.count >= needed else { break }
+        // Data keeps non-zero startIndex after removeFirst — never use absolute
+        // offsets. Walk with indices relative to startIndex, trim once at the end.
+        var offset = buffer.startIndex
+        while buffer.endIndex - offset >= 5 {
+            let payloadLen = Int(UInt32(bigEndian:
+                buffer[offset..<offset + 4].withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }))
+            let msgType = buffer[offset + 4]
+            let needed  = 5 + payloadLen
+            guard buffer.endIndex - offset >= needed else { break }
 
-            let payload = buffer.subdata(in: 5..<needed)
-            buffer.removeFirst(needed)
+            // Copy rebases indices to 0 for downstream parsers.
+            let payload = Data(buffer[(offset + 5)..<(offset + needed)])
+            offset += needed
             handle(type: msgType, payload: payload)
         }
+        buffer.removeSubrange(buffer.startIndex..<offset)
     }
 
     private func handle(type: UInt8, payload: Data) {
