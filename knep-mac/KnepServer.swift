@@ -44,6 +44,10 @@ class KnepServer {
         let conn = KnepConnection(nwConnection: nwConn)
         connections.append(conn)
 
+        conn.onBacklogDrained = { [weak self] in
+            self?.queue.async { self?.captureManager?.resendKeyFrame() }
+        }
+
         conn.onDisconnect = { [weak self] in
             self?.queue.async {
                 self?.connections.removeAll { $0 === conn }
@@ -91,12 +95,17 @@ class KnepServer {
 final class KnepConnection {
     private let nwConn: NWConnection
     var onDisconnect: (() -> Void)?
+    // Fired after the backlog drains following overflow drops, so the server
+    // can push a fresh keyframe — without it the client shows a frozen frame
+    // until the screen happens to produce the next scheduled keyframe.
+    var onBacklogDrained: (() -> Void)?
     private let sendQueue = DispatchQueue(label: "knep.conn.send", qos: .userInteractive)
     private var pending: [Data] = []
     private var sending = false
+    private var droppedSinceDrain = false
     // Keep the backlog short so latency can't accumulate — stale frames are
-    // worse than dropped ones for interactive use. On overflow we drop the
-    // frame; the 60-frame keyframe interval recovers the picture within 2s.
+    // worse than dropped ones for interactive use. Heavy motion (Space-switch
+    // animations) overflows this; the drain callback above recovers the picture.
     private let maxPending = 20
 
     init(nwConnection: NWConnection) {
@@ -130,7 +139,10 @@ final class KnepConnection {
         // 0x02 keyframe arrive back-to-back and both must reach the decoder.
         sendQueue.async { [weak self] in
             guard let self else { return }
-            guard self.pending.count < self.maxPending else { return }
+            guard self.pending.count < self.maxPending else {
+                self.droppedSinceDrain = true
+                return
+            }
             self.pending.append(msg)
             self.pump()
         }
@@ -152,6 +164,10 @@ final class KnepConnection {
                     return
                 }
                 self.sending = false
+                if self.pending.isEmpty, self.droppedSinceDrain {
+                    self.droppedSinceDrain = false
+                    self.onBacklogDrained?()
+                }
                 self.pump()
             }
         })

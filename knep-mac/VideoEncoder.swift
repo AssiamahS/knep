@@ -59,6 +59,10 @@ class VideoEncoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: 8_000_000 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 60 as CFNumber)
+        // Frame-count interval alone stalls recovery on mostly-static screens
+        // (SCK only emits frames on change) — also force a keyframe every 2s
+        // of wall-clock encoded video.
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 2 as CFNumber)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
         VTCompressionSessionPrepareToEncodeFrames(session)
         print("[encoder] ready \(width)×\(height)")
